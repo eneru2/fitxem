@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Just Clock — Fichaje digital legal y simple</title>
+  <meta name="description" content="Fichaje digital para pymes españolas. Cumple RDL 8/2019 y preparado para la nueva normativa. Desde 1,99€/empleado/mes.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="header">
+    <div class="container nav">
+      <strong class="logo">Just Clock</strong>
+      <nav>
+        <a href="#precios">Precios</a>
+        <a href="#cumplimiento">Cumplimiento</a>
+        <a href="privacidad.html">Privacidad</a>
+        <a href="#registro" class="btn btn-primary">Empezar gratis</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container">
+        <h1>Fichaje digital legal, simple y barato</h1>
+        <p>Para pymes que solo necesitan cumplir la ley sin pagar por un suite de RRHH completo.</p>
+        <a href="#registro" class="btn btn-primary btn-lg">Prueba 14 días gratis</a>
+      </div>
+    </section>
+
+    <section id="cumplimiento" class="section">
+      <div class="container">
+        <h2>Cumplimiento normativo</h2>
+        <ul class="features">
+          <li>Registro diario de jornada (RDL 8/2019)</li>
+          <li>Cadena hash SHA-256 e inmutabilidad</li>
+          <li>Sellado temporal RFC 3161</li>
+          <li>Exportación PDF, JSON y XML para inspección</li>
+          <li>API ITSS preparada para inspección remota</li>
+          <li>Conservación 4 años · Datos en la UE</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="precios" class="section section-alt">
+      <div class="container">
+        <h2>Precios simples</h2>
+        <div class="pricing">
+          <div class="card">
+            <h3>Starter</h3>
+            <p class="price">1,99€ <span>/ empleado / mes</span></p>
+            <p>Hasta 10 empleados</p>
+          </div>
+          <div class="card card-featured">
+            <h3>Business</h3>
+            <p class="price">1,49€ <span>/ empleado / mes</span></p>
+            <p>11–50 empleados</p>
+          </div>
+          <div class="card">
+            <h3>Empresa</h3>
+            <p class="price">0,99€ <span>/ empleado / mes</span></p>
+            <p>51+ empleados</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="registro" class="section">
+      <div class="container">
+        <h2>Registra tu empresa</h2>
+        <form id="register-form" class="register-form">
+          <input type="text" name="cif" placeholder="CIF" required>
+          <input type="text" name="legal_name" placeholder="Razón social" required>
+          <input type="text" name="owner_name" placeholder="Nombre responsable" required>
+          <input type="text" name="owner_nif" placeholder="NIF responsable" required>
+          <input type="email" name="owner_email" placeholder="Email" required>
+          <input type="password" name="owner_password" placeholder="Contraseña" required minlength="8">
+          <button type="submit" class="btn btn-primary btn-lg">Crear cuenta</button>
+          <p id="form-msg" class="form-msg"></p>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>© 2026 Just Clock · <a href="privacidad.html">Política de privacidad</a> · <a href="dpa.html">DPA</a> · <a href="cookies.html">Cookies</a></p>
+    </div>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>

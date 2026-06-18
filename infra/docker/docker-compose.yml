@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: justclock
+      POSTGRES_PASSWORD: justclock
+      POSTGRES_DB: justclock
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U justclock"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://justclock:justclock@postgres:5432/justclock?sslmode=disable
+      API_ADDR: :8080
+      JWT_SECRET: dev-secret-change-me
+      TSA_URL: mock
+      ITSS_API_KEY: dev-itss-key
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres_data:

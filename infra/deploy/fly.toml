@@ -1,0 +1,23 @@
+# fly.toml app config — deploy to EU (Frankfurt)
+app = "just-clock-api"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+  build-target = ""
+
+[env]
+  API_ADDR = ":8080"
+  TSA_URL = "mock"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

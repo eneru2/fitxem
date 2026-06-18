@@ -1,0 +1,43 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Go
+backend/bin/
+backend/tmp/
+*.exe
+*.test
+
+# Flutter
+frontend/.dart_tool/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/.packages
+frontend/build/
+frontend/.pub-cache/
+frontend/.pub/
+frontend/**/GeneratedPluginRegistrant.*
+frontend/**/generated_plugin_registrant.*
+frontend/**/flutter_export_environment.sh
+frontend/**/Flutter-Generated.xcconfig
+frontend/**/local.properties
+frontend/**/ephemeral/
+
+# Infra
+infra/docker/data/
+
+# Web
+web/node_modules/
+web/dist/
+web/.astro/
