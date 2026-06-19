@@ -2,10 +2,35 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'linux_location_banner.dart';
 
+const _prefsKeyGpsEnabled = 'clock_gps_enabled';
+
 final locationServiceProvider = Provider((_) => LocationService());
+
+class GpsForClockNotifier extends StateNotifier<bool> {
+  GpsForClockNotifier() : super(true) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = prefs.getBool(_prefsKeyGpsEnabled) ?? true;
+  }
+
+  Future<void> setEnabled(bool enabled) async {
+    state = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefsKeyGpsEnabled, enabled);
+  }
+}
+
+final gpsForClockEnabledProvider =
+    StateNotifierProvider<GpsForClockNotifier, bool>((ref) {
+  return GpsForClockNotifier();
+});
 
 /// Linux-only banner when GeoClue or system location services are unavailable.
 final linuxLocationBannerProvider =

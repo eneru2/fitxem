@@ -11,6 +11,7 @@ import 'package:fitxem/providers/auth_provider.dart';
 import 'package:fitxem/services/api_client.dart';
 import 'package:fitxem/services/location_service.dart';
 import 'package:fitxem/services/linux_location_banner.dart';
+import 'package:fitxem/services/reminder_service.dart';
 import 'package:fitxem/theme/app_theme.dart';
 import 'package:fitxem/widgets/app_page.dart';
 
@@ -33,11 +34,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _sheetDragging = false;
 
   static const _sheetAnimDuration = Duration(milliseconds: 250);
+  static const _sheetSnapSizes = [0.30, 0.42, 0.65, 0.92];
 
   @override
   void initState() {
     super.initState();
     _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(reminderServiceProvider).syncReminders();
+    });
   }
 
   @override
@@ -259,13 +264,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _clock(String endpoint) async {
     HapticFeedback.lightImpact();
     try {
-      final location =
-          await ref.read(locationServiceProvider).capturePosition();
+      final gpsEnabled = ref.read(gpsForClockEnabledProvider);
+      final location = gpsEnabled
+          ? await ref.read(locationServiceProvider).capturePosition()
+          : const LocationCaptureResult(
+              status: LocationCaptureStatus.skippedUnavailable,
+            );
       await ref.read(apiClientProvider).clock(
             endpoint,
             latitude: location.position?.latitude,
             longitude: location.position?.longitude,
           );
+      if (endpoint == 'in') {
+        await ref.read(reminderServiceProvider).cancelTodayReminders();
+      }
       await _load(silent: true);
       if (!mounted) return;
       if (location.status == LocationCaptureStatus.skippedImprecise) {
@@ -282,6 +294,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  Future<void> _toggleGps(bool currentlyEnabled) async {
+    HapticFeedback.selectionClick();
+    if (currentlyEnabled) {
+      await ref.read(gpsForClockEnabledProvider.notifier).setEnabled(false);
+      return;
+    }
+
+    final banner = ref.read(linuxLocationBannerProvider).valueOrNull ??
+        await ref.read(linuxLocationBannerProvider.future);
+    if (banner == LinuxLocationBanner.desktopUnreliable) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(l10n.clockGpsLinuxWarningTitle),
+          content: Text(l10n.locationDesktopUnreliableLinux),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.ok),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    await ref.read(gpsForClockEnabledProvider.notifier).setEnabled(true);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -293,13 +336,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           LinuxLocationBanner.geoclueUnavailable =>
             l10n.locationUnavailableGeoClue,
           LinuxLocationBanner.locationDisabled => l10n.locationDisabledLinux,
-          LinuxLocationBanner.desktopUnreliable =>
-            l10n.locationDesktopUnreliableLinux,
+          LinuxLocationBanner.desktopUnreliable => null,
           LinuxLocationBanner.none => null,
         };
       },
       orElse: () => null,
     );
+    ref.listen<AsyncValue<LinuxLocationBanner>>(linuxLocationBannerProvider,
+        (_, next) {
+      final hasBanner = next.maybeWhen(
+        data: (banner) =>
+            banner == LinuxLocationBanner.geoclueUnavailable ||
+            banner == LinuxLocationBanner.locationDisabled,
+        orElse: () => false,
+      );
+      if (hasBanner &&
+          mounted &&
+          (_sheetExtent ?? _sheetSnapSizes[1]) > _sheetSnapSizes.first) {
+        setState(() => _sheetExtent = _sheetSnapSizes.first);
+      }
+    });
     final dateFmt = DateFormat('EEEE, d MMMM', 'es');
     final timeFmt = DateFormat('HH:mm');
     final status = _statusLabel(l10n);
@@ -307,6 +363,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final more = _moreActions(l10n);
     final clockInTime = _lastClockInTime(timeFmt);
     final isWorking = status == l10n.statusWorking;
+    final gpsEnabled = ref.watch(gpsForClockEnabledProvider);
 
     if (_initialLoading) return const AppLoadingPage();
 
@@ -324,10 +381,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           builder: (context, constraints) {
             final bodyHeight = constraints.maxHeight;
             final sheetHeight = bodyHeight;
-            final snapSizes = [0.42, 0.65, 0.92];
+            final snapSizes = _sheetSnapSizes;
             final minSize = snapSizes.first;
             final maxSize = snapSizes.last;
-            _sheetExtent ??= minSize;
+            _sheetExtent ??=
+                locationBannerMessage != null ? minSize : snapSizes[1];
             final backdropOpacity = _backdropOpacity(
               _sheetExtent!,
               minSize,
@@ -399,7 +457,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ),
                         const SizedBox(height: 16),
                       ],
-                      if (primary != null)
+                      if (primary != null) ...[
+                        Center(
+                          child: _GpsToggle(
+                            enabled: gpsEnabled,
+                            onToggle: () => _toggleGps(gpsEnabled),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
                         _ActionButtonRow(
                           primary: primary,
                           secondary: more.isNotEmpty ? more.first : null,
@@ -408,6 +473,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               ? () => _clock(more.first.endpoint)
                               : null,
                         ),
+                      ],
                       if (_error != null) ...[
                         const SizedBox(height: 16),
                         AppErrorBanner(message: _error!, onRetry: _load),
@@ -671,6 +737,53 @@ class _EntryPill extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GpsToggle extends StatelessWidget {
+  const _GpsToggle({required this.enabled, required this.onToggle});
+
+  final bool enabled;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final bg = enabled ? AppTheme.greenMuted : AppTheme.surfaceMuted;
+    final fg = enabled ? AppTheme.greenText : AppTheme.textSecondary;
+
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+      child: InkWell(
+        onTap: onToggle,
+        borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                enabled
+                    ? CupertinoIcons.location_fill
+                    : CupertinoIcons.location_slash,
+                size: 16,
+                color: fg,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                enabled ? l10n.clockGpsOn : l10n.clockGpsOff,
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: fg,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

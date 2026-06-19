@@ -122,5 +122,9 @@
   "locationUnavailableGeoClue": "La ubicación no está disponible en este equipo: GeoClue no está instalado o en ejecución. Los fichajes se registrarán sin GPS.",
   "locationDisabledLinux": "La ubicación está desactivada en el sistema. Actívala en Ajustes → Privacidad → Ubicación. Los fichajes se registrarán sin GPS.",
   "locationDesktopUnreliableLinux": "En Linux de escritorio la ubicación suele ser muy imprecisa (WiFi/IP). Usa el móvil o el navegador para registrar GPS fiable. Los fichajes desde aquí no incluirán coordenadas.",
-  "locationSkippedImprecise": "Fichaje registrado sin ubicación: la precisión GPS es insuficiente."
+  "locationSkippedImprecise": "Fichaje registrado sin ubicación: la precisión GPS es insuficiente.",
+  "clockGpsOn": "GPS activado",
+  "clockGpsOff": "Sin GPS",
+  "clockGpsLinuxWarningTitle": "GPS en Linux",
+  "ok": "Aceptar"
 }
