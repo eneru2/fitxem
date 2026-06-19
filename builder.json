@@ -6,7 +6,7 @@
     "repo": "fitxem"
   },
   "ios": {
-    "path": "frontend"
+    "path": "frontend/ios"
   },
   "flutter": {
     "watch": {}

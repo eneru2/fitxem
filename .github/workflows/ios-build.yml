@@ -58,9 +58,21 @@ jobs:
 
       - name: Detect project type
         id: detect
+        env:
+          IOS_PATH: ${{ inputs.ios_path }}
         run: |
+          FLUTTER_ROOT=""
           if [ -f "pubspec.yaml" ]; then
+            FLUTTER_ROOT="."
+          elif [ -n "$IOS_PATH" ] && [ -f "$IOS_PATH/pubspec.yaml" ]; then
+            FLUTTER_ROOT="$IOS_PATH"
+          elif [ -n "$IOS_PATH" ] && [ -f "$(dirname "$IOS_PATH")/pubspec.yaml" ]; then
+            FLUTTER_ROOT="$(dirname "$IOS_PATH")"
+          fi
+
+          if [ -n "$FLUTTER_ROOT" ]; then
             echo "type=flutter" >> $GITHUB_OUTPUT
+            echo "flutter_root=$FLUTTER_ROOT" >> $GITHUB_OUTPUT
           elif [ -f "package.json" ] && grep -q '"expo"' package.json; then
             echo "type=expo" >> $GITHUB_OUTPUT
           elif [ -f "package.json" ] && grep -q '"react-native"' package.json; then
@@ -79,6 +91,7 @@ jobs:
 
       - name: Flutter pub get
         if: steps.detect.outputs.type == 'flutter'
+        working-directory: ${{ steps.detect.outputs.flutter_root }}
         run: flutter pub get
 
       - name: Setup Node.js
@@ -151,6 +164,7 @@ jobs:
         env:
           BUILD_ID: ${{ inputs.build_id }}
           IOS_PATH: ${{ inputs.ios_path }}
+          FLUTTER_ROOT: ${{ steps.detect.outputs.flutter_root }}
           SCHEME: ${{ inputs.scheme }}
           PROJECT_TYPE: ${{ steps.detect.outputs.type }}
           USE_SIGNING: ${{ inputs.use_signing }}
@@ -189,7 +203,7 @@ jobs:
           DERIVED_DATA_PATH="${GITHUB_WORKSPACE}/DerivedData"
 
           if [ "$PROJECT_TYPE" = "flutter" ]; then
-            cd ..
+            cd "${GITHUB_WORKSPACE}/${FLUTTER_ROOT}"
             if [ "$CONFIGURATION" = "Debug" ]; then
               echo "Building Flutter iOS Debug..."
               flutter build ios --debug --no-codesign
@@ -197,7 +211,6 @@ jobs:
               echo "Building Flutter iOS Release..."
               flutter build ios --release --no-codesign
             fi
-            cd "$IOS_PATH"
           elif [ "$PROJECT_TYPE" = "reactnative" ] || [ "$PROJECT_TYPE" = "expo" ]; then
             # Use xcodebuild directly for React Native/Expo
             echo "Building React Native iOS ($CONFIGURATION)..."
@@ -286,8 +299,8 @@ jobs:
           else
             # For unsigned builds, find .app and create IPA
             if [ "$PROJECT_TYPE" = "flutter" ]; then
-              # Flutter outputs to build/ios/iphoneos/
-              APP_PATH=$(find "${GITHUB_WORKSPACE}/build/ios/iphoneos" -name "*.app" -type d | head -1)
+              # Flutter outputs to <flutter_root>/build/ios/iphoneos/
+              APP_PATH=$(find "${GITHUB_WORKSPACE}/${FLUTTER_ROOT}/build/ios/iphoneos" -name "*.app" -type d | head -1)
             else
               # Native and React Native/Expo use DerivedData
               APP_PATH=$(find "$DERIVED_DATA_PATH/Build/Products/${CONFIGURATION}-iphoneos" -name "*.app" -type d | head -1)
