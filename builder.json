@@ -1,0 +1,16 @@
+{
+  "project": "fitxem",
+  "platform": "ios",
+  "github": {
+    "owner": "eneru2",
+    "repo": "fitxem"
+  },
+  "ios": {
+    "path": "frontend"
+  },
+  "flutter": {
+    "watch": {}
+  },
+  "reactNative": {},
+  "mobai": {}
+}
