@@ -1,0 +1,50 @@
+---
+description: How to use the Klein CLI for Go + templ projects
+globs: "backend/dashboard/**/*.templ,backend/dashboard/klein.config,backend/dashboard/tailwind.conf"
+alwaysApply: false
+---
+
+# Klein
+
+Klein is a dev tool for Go web apps using [templ](https://templ.guide). It compiles `.templ` views into Go under `.klein/`, builds the app, and runs a dev server with hot reload.
+
+## Project layout
+
+Dashboard Klein app lives under `backend/dashboard/`:
+
+- `backend/dashboard/views/` — source `.templ` files (edit these)
+- `backend/dashboard/.klein/views/` — generated Go (do not edit)
+- `backend/dashboard/.klein/hotreload/` — generated hot-reload code (do not edit)
+- `backend/dashboard/public/` — static assets
+- `backend/dashboard/klein.config` — paths config (`views`, `klein`, `public`)
+- `tailwind.conf` — optional Tailwind config
+
+## Commands
+
+| Command | When to use |
+|---------|-------------|
+| `klein init [--here]` | Scaffold a new project |
+| `klein dev` | Start dev server + file watcher (blocks, uses port 5490 by default) |
+| `klein check` | **Verify changes without starting a server** |
+| `klein check --tailwind --test` | Full validation: build + CSS + tests |
+| `klein tailwind init` | Add Tailwind to an existing project |
+
+## Agent workflow
+
+**Use `klein check` to verify work — not `klein dev`.**
+
+`klein dev` starts a long-running server on port 5490 and will conflict if one is already running. After editing views or Go code, run:
+
+```bash
+klein check
+```
+
+Exit 0 = compiles; exit 1 = fix the reported templ/build/test error.
+
+Only suggest `klein dev` when the user explicitly wants to run the app locally.
+
+## Editing rules
+
+- Edit `backend/dashboard/views/**/*.templ`, never `backend/dashboard/.klein/views/**/*.go`
+- In templ files, import hot reload as `<module>/dashboard/.klein/hotreload`
+- Run `go build` directly only if Klein is unavailable; prefer `klein check` in Klein projects

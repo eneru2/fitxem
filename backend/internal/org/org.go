@@ -28,14 +28,18 @@ type Organization struct {
 }
 
 type Employee struct {
-	ID           uuid.UUID  `json:"id"`
-	OrgID        uuid.UUID  `json:"org_id"`
-	NIF          string     `json:"nif"`
-	FullName     string     `json:"full_name"`
-	Email        string     `json:"email,omitempty"`
-	Role         string     `json:"role"`
-	WorkCenterID *uuid.UUID `json:"work_center_id,omitempty"`
-	Active       bool       `json:"active"`
+	ID                 uuid.UUID  `json:"id"`
+	OrgID              uuid.UUID  `json:"org_id"`
+	NIF                string     `json:"nif"`
+	FullName           string     `json:"full_name"`
+	Email              string     `json:"email,omitempty"`
+	Role               string     `json:"role"`
+	WorkCenterID       *uuid.UUID `json:"work_center_id,omitempty"`
+	Active             bool       `json:"active"`
+	ScheduleType       string     `json:"schedule_type"`
+	ScheduleTemplateID *uuid.UUID `json:"schedule_template_id,omitempty"`
+	WeeklyHours        *float64   `json:"weekly_hours,omitempty"`
+	VacationDaysAnnual int        `json:"vacation_days_annual"`
 }
 
 type WorkCenter struct {
@@ -47,13 +51,30 @@ type WorkCenter struct {
 }
 
 type CreateEmployeeInput struct {
-	OrgID        uuid.UUID
-	NIF          string
-	FullName     string
-	Email        string
-	Password     string
-	Role         string
-	WorkCenterID *uuid.UUID
+	OrgID              uuid.UUID
+	NIF                string
+	FullName           string
+	Email              string
+	Password           string
+	Role               string
+	WorkCenterID       *uuid.UUID
+	VacationDaysAnnual int
+	ScheduleType       string
+	ScheduleTemplateID *uuid.UUID
+	WeeklyHours        *float64
+	ScheduleSlots      []ScheduleSlotInput
+}
+
+type ScheduleSlotInput struct {
+	DayOfWeek int
+	StartTime string
+	EndTime   string
+}
+
+type UpdateEmployeeInput struct {
+	OrgID              uuid.UUID
+	EmployeeID         uuid.UUID
+	VacationDaysAnnual *int
 }
 
 func (s *Service) GetOrg(ctx context.Context, orgID uuid.UUID) (*Organization, error) {
@@ -71,7 +92,8 @@ func (s *Service) GetOrg(ctx context.Context, orgID uuid.UUID) (*Organization, e
 func (s *Service) ListEmployees(ctx context.Context, orgID uuid.UUID) ([]Employee, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT e.id, e.org_id, e.nif, e.full_name, COALESCE(u.email, ''), COALESCE(u.role::text, 'employee'),
-			e.work_center_id, e.active
+			e.work_center_id, e.active, e.schedule_type::text, e.schedule_template_id, e.weekly_hours,
+			e.vacation_days_annual
 		FROM employees e
 		LEFT JOIN users u ON u.id = e.user_id
 		WHERE e.org_id = $1 ORDER BY e.full_name`,
@@ -84,7 +106,10 @@ func (s *Service) ListEmployees(ctx context.Context, orgID uuid.UUID) ([]Employe
 	var out []Employee
 	for rows.Next() {
 		var e Employee
-		if err := rows.Scan(&e.ID, &e.OrgID, &e.NIF, &e.FullName, &e.Email, &e.Role, &e.WorkCenterID, &e.Active); err != nil {
+		if err := rows.Scan(
+			&e.ID, &e.OrgID, &e.NIF, &e.FullName, &e.Email, &e.Role, &e.WorkCenterID, &e.Active,
+			&e.ScheduleType, &e.ScheduleTemplateID, &e.WeeklyHours, &e.VacationDaysAnnual,
+		); err != nil {
 			return nil, err
 		}
 		out = append(out, e)
@@ -95,6 +120,26 @@ func (s *Service) ListEmployees(ctx context.Context, orgID uuid.UUID) ([]Employe
 func (s *Service) CreateEmployee(ctx context.Context, in CreateEmployeeInput) (*Employee, error) {
 	if in.Role == "" {
 		in.Role = "employee"
+	}
+	if in.VacationDaysAnnual <= 0 {
+		in.VacationDaysAnnual = 22
+	}
+	if in.ScheduleType == "" {
+		in.ScheduleType = "none"
+	}
+	switch in.ScheduleType {
+	case "template":
+		if in.ScheduleTemplateID == nil {
+			return nil, errors.New("schedule_template_id required for template schedule")
+		}
+	case "flexible":
+		if in.WeeklyHours == nil || *in.WeeklyHours <= 0 {
+			return nil, errors.New("weekly_hours required for flexible schedule")
+		}
+	case "custom":
+		if len(in.ScheduleSlots) == 0 {
+			return nil, errors.New("schedule_slots required for custom schedule")
+		}
 	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -121,21 +166,74 @@ func (s *Service) CreateEmployee(ctx context.Context, in CreateEmployeeInput) (*
 
 	var e Employee
 	err = tx.QueryRow(ctx, `
-		INSERT INTO employees (org_id, user_id, work_center_id, nif, full_name)
-		VALUES ($1,$2,$3,$4,$5)
-		RETURNING id, org_id, nif, full_name, work_center_id, active`,
+		INSERT INTO employees (
+			org_id, user_id, work_center_id, nif, full_name,
+			vacation_days_annual, schedule_type, schedule_template_id, weekly_hours
+		)
+		VALUES ($1,$2,$3,$4,$5,$6,$7::employee_schedule_type,$8,$9)
+		RETURNING id, org_id, nif, full_name, work_center_id, active,
+			schedule_type::text, schedule_template_id, weekly_hours, vacation_days_annual`,
 		in.OrgID, userID, in.WorkCenterID, in.NIF, in.FullName,
-	).Scan(&e.ID, &e.OrgID, &e.NIF, &e.FullName, &e.WorkCenterID, &e.Active)
+		in.VacationDaysAnnual, in.ScheduleType, in.ScheduleTemplateID, in.WeeklyHours,
+	).Scan(
+		&e.ID, &e.OrgID, &e.NIF, &e.FullName, &e.WorkCenterID, &e.Active,
+		&e.ScheduleType, &e.ScheduleTemplateID, &e.WeeklyHours, &e.VacationDaysAnnual,
+	)
 	if err != nil {
 		return nil, err
 	}
 	e.Email = in.Email
 	e.Role = in.Role
 
+	if in.ScheduleType == "custom" && len(in.ScheduleSlots) > 0 {
+		for _, sl := range in.ScheduleSlots {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO employee_schedule_slots (employee_id, day_of_week, start_time, end_time)
+				VALUES ($1, $2, $3::time, $4::time)`,
+				e.ID, sl.DayOfWeek, sl.StartTime, sl.EndTime,
+			)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 	return &e, nil
+}
+
+func (s *Service) UpdateEmployee(ctx context.Context, in UpdateEmployeeInput) (*Employee, error) {
+	if in.VacationDaysAnnual == nil {
+		return nil, errors.New("nothing to update")
+	}
+	var e Employee
+	err := s.pool.QueryRow(ctx, `
+		UPDATE employees SET vacation_days_annual = $1
+		WHERE id = $2 AND org_id = $3
+		RETURNING id, org_id, nif, full_name, work_center_id, active,
+			schedule_type::text, schedule_template_id, weekly_hours, vacation_days_annual`,
+		*in.VacationDaysAnnual, in.EmployeeID, in.OrgID,
+	).Scan(
+		&e.ID, &e.OrgID, &e.NIF, &e.FullName, &e.WorkCenterID, &e.Active,
+		&e.ScheduleType, &e.ScheduleTemplateID, &e.WeeklyHours, &e.VacationDaysAnnual,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &e, nil
+}
+
+func (s *Service) GetVacationDaysAnnual(ctx context.Context, employeeID uuid.UUID) (int, error) {
+	var days int
+	err := s.pool.QueryRow(ctx,
+		`SELECT vacation_days_annual FROM employees WHERE id = $1`, employeeID,
+	).Scan(&days)
+	return days, err
 }
 
 func (s *Service) ListWorkCenters(ctx context.Context, orgID uuid.UUID) ([]WorkCenter, error) {

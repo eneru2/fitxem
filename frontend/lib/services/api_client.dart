@@ -6,7 +6,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:fitxem/config.dart';
 import 'package:fitxem/models/absence_request.dart';
 import 'package:fitxem/models/clock_event.dart';
+import 'package:fitxem/models/employee_schedule.dart';
 import 'package:fitxem/models/incident_request.dart';
+import 'package:fitxem/models/schedule_template.dart';
+import 'package:fitxem/models/vacation_balance.dart';
 import 'package:fitxem/services/session_events.dart';
 
 final secureStorageProvider = Provider((_) => const FlutterSecureStorage());
@@ -288,5 +291,72 @@ class ApiClient {
       'reason': reason,
     });
     return AbsenceRequest.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Future<List<ScheduleTemplate>> listScheduleTemplates() async {
+    final res = await _dio.get('/admin/schedule-templates');
+    final data = res.data as Map<String, dynamic>;
+    final raw = List<dynamic>.from(data['templates'] as List? ?? []);
+    return raw
+        .map((e) =>
+            ScheduleTemplate.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  Future<ScheduleTemplate> createScheduleTemplate(
+      Map<String, dynamic> data) async {
+    final res = await _dio.post('/admin/schedule-templates', data: data);
+    return ScheduleTemplate.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Future<ScheduleTemplate> updateScheduleTemplate(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    final res = await _dio.patch('/admin/schedule-templates/$id', data: data);
+    return ScheduleTemplate.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Future<void> deleteScheduleTemplate(String id) async {
+    await _dio.delete('/admin/schedule-templates/$id');
+  }
+
+  Future<EmployeeSchedule> assignEmployeeSchedule(
+    String employeeId,
+    Map<String, dynamic> data,
+  ) async {
+    final res =
+        await _dio.patch('/admin/employees/$employeeId/schedule', data: data);
+    return EmployeeSchedule.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Future<EmployeeSchedule> getEmployeeSchedule(String employeeId) async {
+    final res = await _dio.get('/admin/employees/$employeeId/schedule');
+    return EmployeeSchedule.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Future<EmployeeSchedule> getMySchedule() async {
+    final res = await _dio.get('/me/schedule');
+    return EmployeeSchedule.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Future<VacationBalance> getVacationBalance({int? year}) async {
+    final res = await _dio.get('/me/vacation-balance', queryParameters: {
+      if (year != null) 'year': year,
+    });
+    return VacationBalance.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Future<Map<String, dynamic>> createCheckoutSession({
+    required String planId,
+    required int seatCount,
+    required String period,
+  }) async {
+    final res = await _dio.post('/admin/billing/checkout', data: {
+      'plan_id': planId,
+      'seat_count': seatCount,
+      'period': period,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
   }
 }

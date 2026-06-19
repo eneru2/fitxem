@@ -1,11 +1,14 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:fitxem/l10n/app_localizations.dart';
 import 'package:fitxem/models/absence_request.dart';
 import 'package:fitxem/models/incident_request.dart';
 import 'package:fitxem/providers/auth_provider.dart';
+import 'package:fitxem/models/schedule_slot.dart';
+import 'package:fitxem/models/schedule_template.dart';
 import 'package:fitxem/services/api_client.dart';
 import 'package:fitxem/theme/app_theme.dart';
 import 'package:fitxem/widgets/app_page.dart';
@@ -21,6 +24,7 @@ class AdminScreen extends ConsumerStatefulWidget {
 class _AdminScreenState extends ConsumerState<AdminScreen> {
   int _tab = 0;
   List<dynamic> _employees = [];
+  List<ScheduleTemplate> _templates = [];
   List<IncidentRequest> _incidents = [];
   List<AbsenceRequest> _absences = [];
   bool _loading = true;
@@ -48,11 +52,13 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     try {
       final api = ref.read(apiClientProvider);
       final employees = await api.listEmployees();
+      final templates = await api.listScheduleTemplates();
       final incidents = await api.listCorrections();
       final absences = await api.listAbsences();
       if (!mounted) return;
       setState(() {
         _employees = employees;
+        _templates = templates;
         _incidents = incidents;
         _absences = absences;
       });
@@ -86,6 +92,27 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     }
   }
 
+  Future<void> _openAddEmployee() async {
+    final changed = await context.push<bool>('/admin/employees/new');
+    if (changed == true && mounted) _load();
+  }
+
+  Future<void> _openEditEmployee(Map<String, dynamic> employee) async {
+    final changed = await context.push<bool>(
+      '/admin/employees/edit',
+      extra: employee,
+    );
+    if (changed == true && mounted) _load();
+  }
+
+  Future<void> _openTemplateForm({ScheduleTemplate? template}) async {
+    final path = template == null
+        ? '/admin/templates/new'
+        : '/admin/templates/edit';
+    final changed = await context.push<bool>(path, extra: template);
+    if (changed == true && mounted) _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -112,6 +139,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         AppSegmentedTabs(
           labels: [
             l10n.employees,
+            'Horarios',
             l10n.incidents,
             l10n.ausencias,
             l10n.export,
@@ -127,17 +155,23 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         switch (_tab) {
           0 => _EmployeesTab(
               employees: _employees,
-              onAdd: _showAddEmployee,
+              onAdd: _openAddEmployee,
+              onEdit: _openEditEmployee,
             ),
-          1 => _IncidentsTab(
+          1 => _ScheduleTemplatesTab(
+              templates: _templates,
+              onNew: () => _openTemplateForm(),
+              onEdit: (t) => _openTemplateForm(template: t),
+            ),
+          2 => _IncidentsTab(
               incidents: _incidents,
               onReview: _reviewIncident,
             ),
-          2 => _AbsencesTab(
+          3 => _AbsencesTab(
               absences: _absences,
               onReview: _reviewAbsence,
             ),
-          3 => _ExportTab(onExport: _export),
+          4 => _ExportTab(onExport: _export),
           _ => const SizedBox.shrink(),
         },
       ],
@@ -169,203 +203,68 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       }
     }
   }
-
-  Future<void> _showAddEmployee() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _AddEmployeeSheet(
-        onCreate: (data) => ref.read(apiClientProvider).createEmployee(data),
-        onSuccess: _load,
-      ),
-    );
-  }
 }
 
-class _AddEmployeeSheet extends StatefulWidget {
-  const _AddEmployeeSheet({
-    required this.onCreate,
-    required this.onSuccess,
+class _ScheduleTemplatesTab extends StatelessWidget {
+  const _ScheduleTemplatesTab({
+    required this.templates,
+    required this.onNew,
+    required this.onEdit,
   });
 
-  final Future<void> Function(Map<String, String>) onCreate;
-  final Future<void> Function() onSuccess;
-
-  @override
-  State<_AddEmployeeSheet> createState() => _AddEmployeeSheetState();
-}
-
-class _AddEmployeeSheetState extends State<_AddEmployeeSheet> {
-  final _nif = TextEditingController();
-  final _name = TextEditingController();
-  final _email = TextEditingController();
-  final _password = TextEditingController();
-  bool _submitting = false;
-
-  @override
-  void dispose() {
-    _nif.dispose();
-    _name.dispose();
-    _email.dispose();
-    _password.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (_submitting) return;
-    setState(() => _submitting = true);
-    try {
-      await widget.onCreate({
-        'nif': _nif.text.trim(),
-        'full_name': _name.text.trim(),
-        'email': _email.text.trim(),
-        'password': _password.text,
-      });
-      if (!mounted) return;
-      Navigator.pop(context);
-      await widget.onSuccess();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
-  }
+  final List<ScheduleTemplate> templates;
+  final VoidCallback onNew;
+  final void Function(ScheduleTemplate template) onEdit;
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final sheetHeight = MediaQuery.sizeOf(context).height * 0.92;
-
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.viewInsetsOf(context).bottom,
-      ),
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: Container(
-          height: sheetHeight,
-          decoration: BoxDecoration(
-            color: AppTheme.surface,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(AppTheme.radiusLg),
-            ),
-            border: Border.all(color: AppTheme.border.withValues(alpha: 0.8)),
-          ),
-          child: SafeArea(
-            top: false,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Plantillas reutilizables para asignar a empleados.',
+          style: AppTheme.subtitle(context),
+        ),
+        const SizedBox(height: 16),
+        if (templates.isEmpty)
+          const AppEmptyState(
+            message: 'No hay plantillas de horario',
+            icon: CupertinoIcons.clock,
+          )
+        else
+          AppSoftCard(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 10),
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppTheme.border,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+                for (var i = 0; i < templates.length; i++)
+                  AppSettingsRow(
+                    title: templates[i].name,
+                    subtitle: templates[i].scheduleType == 'flexible'
+                        ? '${templates[i].weeklyHours?.toStringAsFixed(0) ?? ''} h/semana'
+                        : '${templates[i].slots.map((s) => s.dayOfWeek).toSet().length} días configurados',
+                    icon: CupertinoIcons.clock,
+                    showDivider: i < templates.length - 1,
+                    onTap: () => onEdit(templates[i]),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 16, 12, 0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Añadir empleado',
-                          style: AppTheme.pageTitle(context),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(
-                          CupertinoIcons.xmark,
-                          size: 20,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 22),
-                  child: Text(
-                    'Introduce los datos del nuevo empleado.',
-                    style: AppTheme.subtitle(context),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 22),
-                    children: [
-                      TextField(
-                        controller: _nif,
-                        decoration: AppTheme.inputDecoration('NIF'),
-                        textInputAction: TextInputAction.next,
-                      ),
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: _name,
-                        decoration: AppTheme.inputDecoration(l10n.ownerName),
-                        textInputAction: TextInputAction.next,
-                      ),
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: _email,
-                        decoration: AppTheme.inputDecoration(l10n.email),
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                      ),
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: _password,
-                        decoration: AppTheme.inputDecoration(l10n.password),
-                        obscureText: true,
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) => _submit(),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 12, 22, 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      AppPrimaryButton(
-                        label: 'Crear empleado',
-                        enabled: !_submitting,
-                        onTap: _submit,
-                      ),
-                      const SizedBox(height: 10),
-                      AppSecondaryButton(
-                        label: 'Cancelar',
-                        onTap: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                ),
               ],
             ),
           ),
-        ),
-      ),
+        const SizedBox(height: 16),
+        AppPrimaryButton(label: 'Nueva plantilla', onTap: onNew),
+      ],
     );
   }
 }
 
 class _EmployeesTab extends StatelessWidget {
-  const _EmployeesTab({required this.employees, required this.onAdd});
+  const _EmployeesTab({
+    required this.employees,
+    required this.onAdd,
+    required this.onEdit,
+  });
 
   final List<dynamic> employees;
   final VoidCallback onAdd;
+  final void Function(Map<String, dynamic> employee) onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -381,16 +280,23 @@ class _EmployeesTab extends StatelessWidget {
           AppSoftCard(
             child: Column(
               children: [
-                for (var i = 0; i < employees.length; i++)
-                  AppSettingsRow(
-                    title: (employees[i] as Map<String, dynamic>)['full_name']
-                            as String? ??
-                        '',
-                    subtitle:
-                        '${(employees[i] as Map<String, dynamic>)['nif']} · ${(employees[i] as Map<String, dynamic>)['email'] ?? ''}',
-                    icon: CupertinoIcons.person,
-                    showDivider: i < employees.length - 1,
-                  ),
+                for (var i = 0; i < employees.length; i++) ...[
+                  Builder(builder: (context) {
+                    final emp = employees[i] as Map<String, dynamic>;
+                    final scheduleType =
+                        emp['schedule_type'] as String? ?? 'none';
+                    final vacationDays =
+                        emp['vacation_days_annual'] as int? ?? 22;
+                    return AppSettingsRow(
+                      title: emp['full_name'] as String? ?? '',
+                      subtitle:
+                          '${emp['nif']} · ${scheduleTypeLabel(scheduleType)} · $vacationDays días vacaciones',
+                      icon: CupertinoIcons.person,
+                      showDivider: i < employees.length - 1,
+                      onTap: () => onEdit(emp),
+                    );
+                  }),
+                ],
               ],
             ),
           ),
@@ -668,4 +574,3 @@ class _ExportTab extends StatelessWidget {
     );
   }
 }
-

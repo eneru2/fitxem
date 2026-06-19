@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:fitxem/l10n/app_localizations.dart';
+import 'package:fitxem/models/vacation_balance.dart';
 import 'package:fitxem/services/api_client.dart';
 import 'package:fitxem/theme/app_theme.dart';
 import 'package:fitxem/widgets/app_page.dart';
@@ -25,6 +26,15 @@ class _AbsenceCreateScreenState extends ConsumerState<AbsenceCreateScreen> {
   bool _loading = true;
   bool _submitting = false;
   String? _error;
+  VacationBalance? _vacationBalance;
+
+  int get _requestedVacationDays =>
+      countVacationDays(_start, _end);
+
+  bool get _vacationOverBalance =>
+      _absenceType == 'vacation' &&
+      _vacationBalance != null &&
+      _requestedVacationDays > _vacationBalance!.remaining;
 
   @override
   void initState() {
@@ -43,9 +53,14 @@ class _AbsenceCreateScreenState extends ConsumerState<AbsenceCreateScreen> {
 
   Future<void> _load() async {
     try {
-      final data = await ref.read(apiClientProvider).todayStatus();
+      final api = ref.read(apiClientProvider);
+      final data = await api.todayStatus();
+      final balance = await api.getVacationBalance();
       if (!mounted) return;
-      setState(() => _employeeId = data['employee_id'] as String?);
+      setState(() {
+        _employeeId = data['employee_id'] as String?;
+        _vacationBalance = balance;
+      });
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
@@ -86,6 +101,10 @@ class _AbsenceCreateScreenState extends ConsumerState<AbsenceCreateScreen> {
     final reason = _reason.text.trim();
     if (employeeId == null || reason.isEmpty) {
       setState(() => _error = l10n.errorInvalidData);
+      return;
+    }
+    if (_vacationOverBalance) {
+      setState(() => _error = 'No tienes suficientes días de vacaciones');
       return;
     }
     setState(() {
@@ -184,6 +203,44 @@ class _AbsenceCreateScreenState extends ConsumerState<AbsenceCreateScreen> {
                   label: dateFmt.format(_end),
                   onTap: _pickEnd,
                 ),
+                if (_absenceType == 'vacation' && _vacationBalance != null) ...[
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppTheme.background,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                      border: Border.all(color: AppTheme.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Saldo de vacaciones (${_vacationBalance!.year})',
+                          style: AppTheme.sectionTitle(context),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${_vacationBalance!.remaining} días disponibles de ${_vacationBalance!.annual} '
+                          '(${_vacationBalance!.used} usados)',
+                          style: AppTheme.rowMeta(context),
+                        ),
+                        if (_requestedVacationDays > 0) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Solicitas $_requestedVacationDays días laborables',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: _vacationOverBalance
+                                  ? const Color(0xFFC62828)
+                                  : AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 20),
                 TextField(
                   controller: _reason,
@@ -215,7 +272,7 @@ class _AbsenceCreateScreenState extends ConsumerState<AbsenceCreateScreen> {
                 const SizedBox(height: 24),
                 AppPrimaryButton(
                   label: _submitting ? l10n.loading : l10n.submitAbsence,
-                  enabled: !_submitting,
+                  enabled: !_submitting && !_vacationOverBalance,
                   onTap: _submit,
                 ),
               ],

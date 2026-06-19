@@ -11,10 +11,11 @@ import (
 )
 
 var (
-	ErrNotFound    = errors.New("absence not found")
-	ErrInvalidType = errors.New("invalid absence type")
-	ErrDateRange   = errors.New("end_date must be on or after start_date")
-	ErrOverlap     = errors.New("overlaps with an approved absence")
+	ErrNotFound           = errors.New("absence not found")
+	ErrInvalidType        = errors.New("invalid absence type")
+	ErrDateRange          = errors.New("end_date must be on or after start_date")
+	ErrOverlap            = errors.New("overlaps with an approved absence")
+	ErrInsufficientVacation = errors.New("insufficient vacation days")
 )
 
 type AbsenceType string
@@ -73,6 +74,108 @@ func validAbsenceType(t AbsenceType) bool {
 	}
 }
 
+type VacationBalance struct {
+	Annual    int `json:"annual"`
+	Used      int `json:"used"`
+	Remaining int `json:"remaining"`
+	Year      int `json:"year"`
+}
+
+func CountVacationDays(start, end time.Time) int {
+	start = dateOnly(start)
+	end = dateOnly(end)
+	count := 0
+	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+		if d.Weekday() != time.Saturday && d.Weekday() != time.Sunday {
+			count++
+		}
+	}
+	return count
+}
+
+func (s *Service) UsedVacationDays(ctx context.Context, employeeID uuid.UUID, year int) (int, error) {
+	yearStart := time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
+	yearEnd := time.Date(year, 12, 31, 0, 0, 0, 0, time.UTC)
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT start_date, end_date FROM absence_requests
+		WHERE employee_id = $1 AND absence_type = 'vacation' AND status = 'approved'
+		  AND start_date <= $3 AND end_date >= $2`,
+		employeeID, yearStart, yearEnd,
+	)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	total := 0
+	for rows.Next() {
+		var start, end time.Time
+		if err := rows.Scan(&start, &end); err != nil {
+			return 0, err
+		}
+		clipStart := start
+		if clipStart.Before(yearStart) {
+			clipStart = yearStart
+		}
+		clipEnd := end
+		if clipEnd.After(yearEnd) {
+			clipEnd = yearEnd
+		}
+		total += CountVacationDays(clipStart, clipEnd)
+	}
+	return total, rows.Err()
+}
+
+func (s *Service) VacationBalance(ctx context.Context, employeeID uuid.UUID, year int) (*VacationBalance, error) {
+	var annual int
+	err := s.pool.QueryRow(ctx,
+		`SELECT vacation_days_annual FROM employees WHERE id = $1`, employeeID,
+	).Scan(&annual)
+	if err != nil {
+		return nil, err
+	}
+	used, err := s.UsedVacationDays(ctx, employeeID, year)
+	if err != nil {
+		return nil, err
+	}
+	remaining := annual - used
+	if remaining < 0 {
+		remaining = 0
+	}
+	return &VacationBalance{Annual: annual, Used: used, Remaining: remaining, Year: year}, nil
+}
+
+func (s *Service) checkVacationBalance(ctx context.Context, employeeID uuid.UUID, start, end time.Time, excludeID *uuid.UUID) error {
+	requested := CountVacationDays(start, end)
+	if requested == 0 {
+		return nil
+	}
+	year := start.Year()
+	bal, err := s.VacationBalance(ctx, employeeID, year)
+	if err != nil {
+		return err
+	}
+
+	// If updating an already-approved request, add its days back temporarily.
+	if excludeID != nil {
+		var existingStart, existingEnd time.Time
+		err := s.pool.QueryRow(ctx, `
+			SELECT start_date, end_date FROM absence_requests
+			WHERE id = $1 AND employee_id = $2 AND absence_type = 'vacation' AND status = 'approved'`,
+			*excludeID, employeeID,
+		).Scan(&existingStart, &existingEnd)
+		if err == nil {
+			bal.Remaining += CountVacationDays(existingStart, existingEnd)
+		}
+	}
+
+	if requested > bal.Remaining {
+		return ErrInsufficientVacation
+	}
+	return nil
+}
+
 func dateOnly(t time.Time) time.Time {
 	y, m, d := t.Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
@@ -112,6 +215,11 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Request, error) 
 	}
 	if err := s.checkOverlap(ctx, in.OrgID, in.EmployeeID, start, end, nil); err != nil {
 		return nil, err
+	}
+	if in.AbsenceType == TypeVacation {
+		if err := s.checkVacationBalance(ctx, in.EmployeeID, start, end, nil); err != nil {
+			return nil, err
+		}
 	}
 
 	var id uuid.UUID
@@ -162,6 +270,18 @@ func (s *Service) Review(ctx context.Context, orgID, absenceID, reviewerID uuid.
 	if approve {
 		if err := s.checkOverlap(ctx, orgID, employeeID, start, end, &absenceID); err != nil {
 			return nil, err
+		}
+		var absenceType string
+		err = s.pool.QueryRow(ctx,
+			`SELECT absence_type::text FROM absence_requests WHERE id = $1`, absenceID,
+		).Scan(&absenceType)
+		if err != nil {
+			return nil, err
+		}
+		if absenceType == string(TypeVacation) {
+			if err := s.checkVacationBalance(ctx, employeeID, start, end, nil); err != nil {
+				return nil, err
+			}
 		}
 	}
 

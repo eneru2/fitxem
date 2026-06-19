@@ -1,0 +1,234 @@
+package views
+
+import "github.com/eneru2/just-clock/dashboard/dashdata"
+
+templ EmployeesPage(employees []dashdata.Employee, search string) {
+	@Layout("Empleados", "employees") {
+		<header class="page-header">
+			<h1>Empleados</h1>
+			<p class="muted">Todos los empleados de la plataforma</p>
+		</header>
+		<div class="toolbar">
+			<input
+				type="search"
+				name="q"
+				placeholder="Buscar por NIF, nombre o email..."
+				value={ search }
+				hx-get="/dashboard/employees"
+				hx-trigger="keyup changed delay:300ms, search"
+				hx-target="#employee-table-body"
+				hx-select="#employee-table-body"
+				hx-push-url="true"
+			/>
+		</div>
+		<div class="table-wrap">
+			<table class="data-table">
+				<thead>
+					<tr>
+						<th>NIF</th>
+						<th>Nombre</th>
+						<th>Email</th>
+						<th>Rol</th>
+						<th>Horario</th>
+						<th>Estado</th>
+						<th>Org</th>
+						<th></th>
+					</tr>
+				</thead>
+				@EmployeeTableBody(employees, true)
+			</table>
+		</div>
+	}
+}
+
+templ EmployeeTable(employees []dashdata.Employee, showOrg bool) {
+	<div class="table-wrap">
+		<table class="data-table">
+			<thead>
+				<tr>
+					<th>NIF</th>
+					<th>Nombre</th>
+					<th>Email</th>
+					<th>Rol</th>
+					<th>Horario</th>
+					<th>Estado</th>
+					if showOrg {
+						<th>Org</th>
+					}
+					<th></th>
+				</tr>
+			</thead>
+			@EmployeeTableBody(employees, showOrg)
+		</table>
+	</div>
+}
+
+templ EmployeeTableBody(employees []dashdata.Employee, showOrg bool) {
+	<tbody id="employee-table-body">
+		if len(employees) == 0 {
+			<tr>
+				<td colspan="8" class="empty">No hay empleados</td>
+			</tr>
+		}
+		for _, e := range employees {
+			<tr id={ "emp-" + e.ID.String() }>
+				<td><code>{ e.NIF }</code></td>
+				<td>{ e.FullName }</td>
+				<td>{ dashdata.DerefStr(e.Email) }</td>
+				<td>
+					if e.Role != nil {
+						<span class="badge">{ dashdata.RoleLabel(*e.Role) }</span>
+					} else {
+						<span class="muted">—</span>
+					}
+				</td>
+				<td><span class="badge badge-muted">{ e.ScheduleType }</span></td>
+				<td>
+					if e.Active {
+						<span class="badge badge-ok">Activo</span>
+					} else {
+						<span class="badge badge-err">Inactivo</span>
+					}
+				</td>
+				if showOrg {
+					<td>
+						<a href={ templ.SafeURL("/dashboard/orgs/" + e.OrgID.String()) } class="mono">{ dashdata.ShortID(e.OrgID) }</a>
+					</td>
+				}
+				<td>
+					<form
+						hx-post={ templ.SafeURL("/dashboard/employees/" + e.ID.String() + "/toggle-active") }
+						hx-target={ "#emp-" + e.ID.String() }
+						hx-swap="outerHTML"
+					>
+						if e.Active {
+							<button type="submit" class="btn btn-sm btn-ghost">Desactivar</button>
+						} else {
+							<button type="submit" class="btn btn-sm btn-primary">Activar</button>
+						}
+					</form>
+				</td>
+			</tr>
+		}
+	</tbody>
+}
+
+templ EmployeeRow(e dashdata.Employee, showOrg bool) {
+	<tr id={ "emp-" + e.ID.String() }>
+		<td><code>{ e.NIF }</code></td>
+		<td>{ e.FullName }</td>
+		<td>{ dashdata.DerefStr(e.Email) }</td>
+		<td>
+			if e.Role != nil {
+				<span class="badge">{ dashdata.RoleLabel(*e.Role) }</span>
+			} else {
+				<span class="muted">—</span>
+			}
+		</td>
+		<td><span class="badge badge-muted">{ e.ScheduleType }</span></td>
+		<td>
+			if e.Active {
+				<span class="badge badge-ok">Activo</span>
+			} else {
+				<span class="badge badge-err">Inactivo</span>
+			}
+		</td>
+		if showOrg {
+			<td>
+				<a href={ templ.SafeURL("/dashboard/orgs/" + e.OrgID.String()) } class="mono">{ dashdata.ShortID(e.OrgID) }</a>
+			</td>
+		}
+		<td>
+			<form
+				hx-post={ templ.SafeURL("/dashboard/employees/" + e.ID.String() + "/toggle-active") }
+				hx-target={ "#emp-" + e.ID.String() }
+				hx-swap="outerHTML"
+			>
+				if e.Active {
+					<button type="submit" class="btn btn-sm btn-ghost">Desactivar</button>
+				} else {
+					<button type="submit" class="btn btn-sm btn-primary">Activar</button>
+				}
+			</form>
+		</td>
+	</tr>
+}
+
+templ UsersPage(users []dashdata.User, search string) {
+	@Layout("Usuarios", "users") {
+		<header class="page-header">
+			<h1>Usuarios</h1>
+			<p class="muted">Cuentas de acceso en la plataforma</p>
+		</header>
+		<div class="toolbar">
+			<input
+				type="search"
+				name="q"
+				placeholder="Buscar por email o CIF..."
+				value={ search }
+				hx-get="/dashboard/users"
+				hx-trigger="keyup changed delay:300ms, search"
+				hx-target="#user-table-body"
+				hx-select="#user-table-body"
+				hx-push-url="true"
+			/>
+		</div>
+		<div class="table-wrap">
+			<table class="data-table">
+				<thead>
+					<tr>
+						<th>Email</th>
+						<th>Rol</th>
+						<th>Organización</th>
+						<th>CIF</th>
+						<th>Registro</th>
+						<th>ID</th>
+					</tr>
+				</thead>
+				@UserTableBody(users)
+			</table>
+		</div>
+	}
+}
+
+templ UserTable(users []dashdata.User, showOrg bool) {
+	<div class="table-wrap">
+		<table class="data-table">
+			<thead>
+				<tr>
+					<th>Email</th>
+					<th>Rol</th>
+					if showOrg {
+						<th>Organización</th>
+						<th>CIF</th>
+					}
+					<th>Registro</th>
+					<th>ID</th>
+				</tr>
+			</thead>
+			@UserTableBody(users)
+		</table>
+	</div>
+}
+
+templ UserTableBody(users []dashdata.User) {
+	<tbody id="user-table-body">
+		if len(users) == 0 {
+			<tr>
+				<td colspan="6" class="empty">No hay usuarios</td>
+			</tr>
+		}
+		for _, u := range users {
+			<tr>
+				<td>{ u.Email }</td>
+				<td><span class="badge">{ dashdata.RoleLabel(u.Role) }</span></td>
+				<td>
+					<a href={ templ.SafeURL("/dashboard/orgs/" + u.OrgID.String()) }>{ u.OrgName }</a>
+				</td>
+				<td><code>{ u.OrgCIF }</code></td>
+				<td class="mono">{ dashdata.FormatTime(u.CreatedAt) }</td>
+				<td class="mono muted">{ dashdata.ShortID(u.ID) }</td>
+			</tr>
+		}
+	</tbody>
+}

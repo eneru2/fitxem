@@ -747,6 +747,30 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Fichaje registrado sin ubicación: la precisión GPS es insuficiente.'**
   String get locationSkippedImprecise;
+
+  /// No description provided for @clockGpsOn.
+  ///
+  /// In es, this message translates to:
+  /// **'GPS activado'**
+  String get clockGpsOn;
+
+  /// No description provided for @clockGpsOff.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin GPS'**
+  String get clockGpsOff;
+
+  /// No description provided for @clockGpsLinuxWarningTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'GPS en Linux'**
+  String get clockGpsLinuxWarningTitle;
+
+  /// No description provided for @ok.
+  ///
+  /// In es, this message translates to:
+  /// **'Aceptar'**
+  String get ok;
 }
 
 class _AppLocalizationsDelegate

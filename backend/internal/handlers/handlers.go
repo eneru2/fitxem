@@ -16,6 +16,7 @@ import (
 	"github.com/eneru2/just-clock/internal/itss"
 	"github.com/eneru2/just-clock/internal/middleware"
 	"github.com/eneru2/just-clock/internal/org"
+	"github.com/eneru2/just-clock/internal/schedule"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -27,6 +28,7 @@ type API struct {
 	ExportSvc  *compliance.ExportService
 	Correction *correction.Service
 	Absence    *absence.Service
+	Schedule   *schedule.Service
 	Audit      *compliance.AuditService
 	ITSS       *itss.Service
 	Billing    *billing.Service
@@ -192,19 +194,40 @@ func (a *API) ListEmployees(w http.ResponseWriter, r *http.Request) {
 func (a *API) CreateEmployee(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	var req struct {
-		NIF      string `json:"nif"`
-		FullName string `json:"full_name"`
-		Email    string `json:"email"`
-		Password string `json:"password"`
-		Role     string `json:"role"`
+		NIF                string             `json:"nif"`
+		FullName           string             `json:"full_name"`
+		Email              string             `json:"email"`
+		Password           string             `json:"password"`
+		Role               string             `json:"role"`
+		VacationDaysAnnual int                `json:"vacation_days_annual"`
+		ScheduleType       string             `json:"schedule_type"`
+		ScheduleTemplateID *uuid.UUID         `json:"schedule_template_id"`
+		WeeklyHours        *float64           `json:"weekly_hours"`
+		ScheduleSlots      []scheduleSlotBody `json:"schedule_slots"`
+		Slots              []scheduleSlotBody `json:"slots"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
+	slotBody := req.ScheduleSlots
+	if len(slotBody) == 0 {
+		slotBody = req.Slots
+	}
+	slots := make([]org.ScheduleSlotInput, len(slotBody))
+	for i, sl := range slotBody {
+		slots[i] = org.ScheduleSlotInput{
+			DayOfWeek: sl.DayOfWeek,
+			StartTime: sl.StartTime,
+			EndTime:   sl.EndTime,
+		}
+	}
 	e, err := a.Org.CreateEmployee(r.Context(), org.CreateEmployeeInput{
 		OrgID: parseUUID(claims.OrgID), NIF: req.NIF, FullName: req.FullName,
 		Email: req.Email, Password: req.Password, Role: req.Role,
+		VacationDaysAnnual: req.VacationDaysAnnual, ScheduleType: req.ScheduleType,
+		ScheduleTemplateID: req.ScheduleTemplateID, WeeklyHours: req.WeeklyHours,
+		ScheduleSlots: slots,
 	})
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -510,6 +533,203 @@ func (a *API) StripeWebhook(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 	a.Billing.CreateCheckoutSession(w, r)
+}
+
+type scheduleSlotBody struct {
+	DayOfWeek int    `json:"day_of_week"`
+	StartTime string `json:"start_time"`
+	EndTime   string `json:"end_time"`
+}
+
+func (a *API) ListScheduleTemplates(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	list, err := a.Schedule.ListTemplates(r.Context(), parseUUID(claims.OrgID))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"templates": list})
+}
+
+func (a *API) CreateScheduleTemplate(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	var req struct {
+		Name         string             `json:"name"`
+		ScheduleType string             `json:"schedule_type"`
+		WeeklyHours  *float64           `json:"weekly_hours"`
+		Slots        []scheduleSlotBody `json:"slots"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	slots := slotsFromBody(req.Slots)
+	t, err := a.Schedule.CreateTemplate(r.Context(), schedule.CreateTemplateInput{
+		OrgID: parseUUID(claims.OrgID), Name: req.Name,
+		ScheduleType: req.ScheduleType, WeeklyHours: req.WeeklyHours, Slots: slots,
+	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, t)
+}
+
+func (a *API) UpdateScheduleTemplate(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var req struct {
+		Name         string             `json:"name"`
+		ScheduleType string             `json:"schedule_type"`
+		WeeklyHours  *float64           `json:"weekly_hours"`
+		Slots        []scheduleSlotBody `json:"slots"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	t, err := a.Schedule.UpdateTemplate(r.Context(), schedule.UpdateTemplateInput{
+		OrgID: parseUUID(claims.OrgID), TemplateID: id, Name: req.Name,
+		ScheduleType: req.ScheduleType, WeeklyHours: req.WeeklyHours,
+		Slots: slotsFromBody(req.Slots),
+	})
+	if err != nil {
+		if errors.Is(err, schedule.ErrNotFound) {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
+}
+
+func (a *API) DeleteScheduleTemplate(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if err := a.Schedule.DeleteTemplate(r.Context(), parseUUID(claims.OrgID), id); err != nil {
+		if errors.Is(err, schedule.ErrNotFound) {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *API) AssignEmployeeSchedule(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	employeeID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var req struct {
+		ScheduleType       string             `json:"schedule_type"`
+		ScheduleTemplateID *uuid.UUID         `json:"schedule_template_id"`
+		WeeklyHours        *float64           `json:"weekly_hours"`
+		Slots              []scheduleSlotBody `json:"slots"`
+		VacationDaysAnnual *int               `json:"vacation_days_annual"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	sched, err := a.Schedule.AssignEmployeeSchedule(r.Context(), schedule.AssignScheduleInput{
+		OrgID: parseUUID(claims.OrgID), EmployeeID: employeeID,
+		ScheduleType: req.ScheduleType, ScheduleTemplateID: req.ScheduleTemplateID,
+		WeeklyHours: req.WeeklyHours, Slots: slotsFromBody(req.Slots),
+		VacationDaysAnnual: req.VacationDaysAnnual,
+	})
+	if err != nil {
+		if errors.Is(err, schedule.ErrEmployeeNotFound) {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, sched)
+}
+
+func (a *API) MeSchedule(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	orgID := parseUUID(claims.OrgID)
+	userID := parseUUID(claims.UserID)
+	employeeID, err := a.Clock.EmployeeIDForUser(r.Context(), orgID, userID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "employee not found")
+		return
+	}
+	sched, err := a.Schedule.GetEmployeeSchedule(r.Context(), orgID, employeeID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, sched)
+}
+
+func (a *API) GetEmployeeSchedule(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	employeeID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	sched, err := a.Schedule.GetEmployeeSchedule(r.Context(), parseUUID(claims.OrgID), employeeID)
+	if err != nil {
+		if errors.Is(err, schedule.ErrEmployeeNotFound) {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, sched)
+}
+
+func (a *API) MeVacationBalance(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	orgID := parseUUID(claims.OrgID)
+	userID := parseUUID(claims.UserID)
+	employeeID, err := a.Clock.EmployeeIDForUser(r.Context(), orgID, userID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "employee not found")
+		return
+	}
+	year := time.Now().Year()
+	if y := r.URL.Query().Get("year"); y != "" {
+		if parsed, err := strconv.Atoi(y); err == nil {
+			year = parsed
+		}
+	}
+	bal, err := a.Absence.VacationBalance(r.Context(), employeeID, year)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, bal)
+}
+
+func slotsFromBody(body []scheduleSlotBody) []schedule.Slot {
+	slots := make([]schedule.Slot, len(body))
+	for i, sl := range body {
+		slots[i] = schedule.Slot{
+			DayOfWeek: sl.DayOfWeek,
+			StartTime: sl.StartTime,
+			EndTime:   sl.EndTime,
+		}
+	}
+	return slots
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

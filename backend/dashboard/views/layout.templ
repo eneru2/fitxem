@@ -1,0 +1,139 @@
+package views
+
+import (
+	"github.com/eneru2/just-clock/dashboard/.klein/hotreload"
+	"github.com/eneru2/just-clock/dashboard/dashdata"
+)
+
+templ Layout(title string, activeNav string) {
+	<!DOCTYPE html>
+	<html lang="es">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ title } · Fitxem Ops</title>
+			<link rel="icon" href="/dashboard/static/fitxem.svg" type="image/svg+xml"/>
+			<script src="https://unpkg.com/htmx.org@2.0.4"></script>
+			<script defer src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js"></script>
+			<link rel="stylesheet" href="/dashboard/static/style.css"/>
+		</head>
+		<body>
+			<div class="app">
+				<aside class="sidebar">
+					<div class="brand">
+						<span class="brand-mark">
+							<img src="/dashboard/static/fitxem.svg" alt="" width="24" height="24"/>
+						</span>
+						<span>
+							Fitxem
+							<span class="brand-sub">Ops</span>
+						</span>
+					</div>
+					<nav>
+						<a href="/dashboard" class={ navClass(activeNav, "home") }>Resumen</a>
+						<a href="/dashboard/orgs" class={ navClass(activeNav, "orgs") }>Organizaciones</a>
+						<a href="/dashboard/employees" class={ navClass(activeNav, "employees") }>Empleados</a>
+						<a href="/dashboard/users" class={ navClass(activeNav, "users") }>Usuarios</a>
+						<a href="/dashboard/clock-events" class={ navClass(activeNav, "clock") }>Fichajes</a>
+						<a href="/dashboard/corrections" class={ navClass(activeNav, "corrections") }>Correcciones</a>
+						<a href="/dashboard/absences" class={ navClass(activeNav, "absences") }>Ausencias</a>
+					</nav>
+					<form method="POST" action="/dashboard/logout" class="logout-form">
+						<button type="submit" class="btn btn-ghost">Cerrar sesión</button>
+					</form>
+				</aside>
+				<main class="content">
+					{ children... }
+				</main>
+			</div>
+			@hotreload.HotReloader()
+		</body>
+	</html>
+}
+
+func navClass(active, item string) string {
+	if active == item {
+		return "nav-link active"
+	}
+	return "nav-link"
+}
+
+templ LoginPage(errorMsg string) {
+	<!DOCTYPE html>
+	<html lang="es">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>Login · Fitxem Ops</title>
+			<link rel="icon" href="/dashboard/static/fitxem.svg" type="image/svg+xml"/>
+			<link rel="stylesheet" href="/dashboard/static/style.css"/>
+		</head>
+		<body class="login-body">
+			<div class="login-card">
+				<div class="brand">
+					<span class="brand-mark">
+						<img src="/dashboard/static/fitxem.svg" alt="" width="28" height="28"/>
+					</span>
+					<span>Fitxem Ops</span>
+				</div>
+				<h1>Acceso al panel</h1>
+				<p class="muted">Administración de plataforma</p>
+				if errorMsg != "" {
+					<div class="alert alert-err">{ errorMsg }</div>
+				}
+				<form method="POST" action="/dashboard/login">
+					<label for="password">Contraseña</label>
+					<input type="password" id="password" name="password" required autofocus/>
+					<button type="submit" class="btn btn-primary">Entrar</button>
+				</form>
+			</div>
+		</body>
+	</html>
+}
+
+templ HomePage(stats dashdata.Stats) {
+	@Layout("Resumen", "home") {
+		<header class="page-header">
+			<p class="eyebrow">Panel de plataforma</p>
+			<h1>Resumen</h1>
+			<p class="muted">Vista global de la plataforma</p>
+		</header>
+		<div class="stats-grid">
+			<div class="stat-card">
+				<span class="stat-label">Organizaciones</span>
+				<span class="stat-value">{ dashdata.FmtInt(stats.OrgCount) }</span>
+			</div>
+			<div class="stat-card">
+				<span class="stat-label">Usuarios</span>
+				<span class="stat-value">{ dashdata.FmtInt(stats.UserCount) }</span>
+			</div>
+			<div class="stat-card">
+				<span class="stat-label">Empleados</span>
+				<span class="stat-value">{ dashdata.FmtInt(stats.EmployeeCount) }</span>
+				<span class="stat-sub">{ dashdata.FmtInt(stats.ActiveEmployees) } activos</span>
+			</div>
+			<div class="stat-card">
+				<span class="stat-label">Fichajes hoy</span>
+				<span class="stat-value">{ dashdata.FmtInt(stats.ClockEventsToday) }</span>
+				<span class="stat-sub">{ dashdata.FmtInt(stats.ClockEventsTotal) } total</span>
+			</div>
+			<div class="stat-card stat-warn">
+				<span class="stat-label">Correcciones pendientes</span>
+				<span class="stat-value">{ dashdata.FmtInt(stats.PendingCorrections) }</span>
+			</div>
+			<div class="stat-card stat-warn">
+				<span class="stat-label">Ausencias pendientes</span>
+				<span class="stat-value">{ dashdata.FmtInt(stats.PendingAbsences) }</span>
+			</div>
+		</div>
+		<section class="panel">
+			<h2>Accesos rápidos</h2>
+			<div class="quick-links">
+				<a href="/dashboard/orgs" class="quick-link">Ver todas las organizaciones</a>
+				<a href="/dashboard/corrections?status=pending" class="quick-link">Correcciones pendientes</a>
+				<a href="/dashboard/absences?status=pending" class="quick-link">Ausencias pendientes</a>
+				<a href="/dashboard/clock-events" class="quick-link">Últimos fichajes</a>
+			</div>
+		</section>
+	}
+}

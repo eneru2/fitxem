@@ -26,6 +26,7 @@ services:
       DATABASE_URL: postgres://justclock:justclock@postgres:5432/justclock?sslmode=disable
       API_ADDR: :8080
       JWT_SECRET: dev-secret-change-me
+      ADMIN_DASHBOARD_PASSWORD: dev-admin
       TSA_URL: mock
       ITSS_API_KEY: dev-itss-key
     ports:

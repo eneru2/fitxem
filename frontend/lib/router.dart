@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:fitxem/models/schedule_template.dart';
 import 'package:fitxem/providers/auth_provider.dart';
 import 'package:fitxem/screens/absence_create_screen.dart';
 import 'package:fitxem/screens/ausencias_screen.dart';
 import 'package:fitxem/screens/incident_create_screen.dart';
 import 'package:fitxem/screens/incidents_screen.dart';
 import 'package:fitxem/screens/admin_screen.dart';
+import 'package:fitxem/screens/admin_employee_form_screen.dart';
+import 'package:fitxem/screens/admin_template_form_screen.dart';
 import 'package:fitxem/screens/history_calendar_screen.dart';
 import 'package:fitxem/screens/history_screen.dart';
 import 'package:fitxem/screens/home_screen.dart';
 import 'package:fitxem/screens/login_screen.dart';
 import 'package:fitxem/screens/register_screen.dart';
+import 'package:fitxem/screens/billing_screen.dart';
 import 'package:fitxem/screens/settings_screen.dart';
 import 'package:fitxem/theme/app_theme.dart';
 import 'package:fitxem/widgets/app_bottom_bar.dart';
@@ -87,9 +91,47 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
         ],
       ),
-      StatefulShellRoute.indexedStack(
+      GoRoute(
+        path: '/admin/employees/new',
+        builder: (_, __) => const AdminEmployeeFormScreen(),
+      ),
+      GoRoute(
+        path: '/admin/employees/edit',
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is Map<String, dynamic>) {
+            return AdminEmployeeFormScreen(employee: extra);
+          }
+          return const AdminScreen();
+        },
+      ),
+      GoRoute(
+        path: '/admin/templates/new',
+        builder: (_, __) => const AdminTemplateFormScreen(),
+      ),
+      GoRoute(
+        path: '/admin/templates/edit',
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is ScheduleTemplate) {
+            return AdminTemplateFormScreen(template: extra);
+          }
+          return const AdminScreen();
+        },
+      ),
+      GoRoute(
+        path: '/settings/billing',
+        builder: (_, __) => const BillingScreen(),
+      ),
+      StatefulShellRoute(
         builder: (context, state, navigationShell) {
           return MainShell(navigationShell: navigationShell);
+        },
+        navigatorContainerBuilder: (context, navigationShell, children) {
+          return AnimatedBranchContainer(
+            currentIndex: navigationShell.currentIndex,
+            children: children,
+          );
         },
         branches: [
           StatefulShellBranch(
@@ -129,6 +171,42 @@ final routerProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
+
+class AnimatedBranchContainer extends StatelessWidget {
+  const AnimatedBranchContainer({
+    super.key,
+    required this.currentIndex,
+    required this.children,
+  });
+
+  final int currentIndex;
+  final List<Widget> children;
+
+  static const _duration = Duration(milliseconds: 280);
+  static const _curve = Curves.easeInOutCubic;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        for (var i = 0; i < children.length; i++)
+          AnimatedOpacity(
+            opacity: i == currentIndex ? 1 : 0,
+            duration: _duration,
+            curve: _curve,
+            child: IgnorePointer(
+              ignoring: i != currentIndex,
+              child: TickerMode(
+                enabled: i == currentIndex,
+                child: children[i],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
 
 class MainShell extends StatelessWidget {
   const MainShell({super.key, required this.navigationShell});

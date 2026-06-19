@@ -10,6 +10,9 @@ class AppBottomBar extends StatelessWidget {
     required this.onSelected,
   });
 
+  static const _animDuration = Duration(milliseconds: 320);
+  static const _animCurve = Curves.easeInOutCubic;
+
   final int selectedIndex;
   final ValueChanged<int> onSelected;
 
@@ -19,6 +22,12 @@ class AppBottomBar extends StatelessWidget {
     _NavItem(label: 'Admin', icon: CupertinoIcons.briefcase),
     _NavItem(label: 'Ajustes', icon: CupertinoIcons.sun_max),
   ];
+
+  Alignment _alignmentFor(int index, int count) {
+    if (count <= 1) return Alignment.center;
+    final fraction = index / (count - 1);
+    return Alignment(fraction * 2 - 1, 0);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,16 +49,43 @@ class AppBottomBar extends StatelessWidget {
           top: false,
           child: SizedBox(
             height: AppTheme.navBarHeight,
-            child: Row(
+            child: Stack(
+              fit: StackFit.expand,
               children: [
-                for (var i = 0; i < _items.length; i++)
-                  Expanded(
-                    child: _NavButton(
-                      item: _items[i],
-                      selected: selectedIndex == i,
-                      onTap: () => onSelected(i),
+                AnimatedAlign(
+                  duration: _animDuration,
+                  curve: _animCurve,
+                  alignment: _alignmentFor(selectedIndex, _items.length),
+                  child: FractionallySizedBox(
+                    widthFactor: 1 / _items.length,
+                    heightFactor: 1,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 8,
+                      ),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: AppTheme.navBarActive,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
                     ),
                   ),
+                ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < _items.length; i++)
+                      Expanded(
+                        child: _NavButton(
+                          item: _items[i],
+                          selected: selectedIndex == i,
+                          onTap: () => onSelected(i),
+                        ),
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -87,35 +123,41 @@ class _NavButton extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: _handleTap,
-      child: Center(
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          padding: EdgeInsets.symmetric(
-            horizontal: selected ? 16 : 0,
-            vertical: selected ? 8 : 0,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          AnimatedAlign(
+            duration: AppBottomBar._animDuration,
+            curve: AppBottomBar._animCurve,
+            alignment: selected ? const Alignment(0, -0.35) : Alignment.center,
+            child: AnimatedOpacity(
+              duration: AppBottomBar._animDuration,
+              curve: AppBottomBar._animCurve,
+              opacity: selected ? 1 : 0.45,
+              child: Icon(item.icon, size: 20, color: Colors.white),
+            ),
           ),
-          decoration: BoxDecoration(
-            color: selected ? AppTheme.navBarActive : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                item.icon,
-                size: 20,
-                color: selected
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.45),
+          Positioned(
+            left: 4,
+            right: 4,
+            bottom: 10,
+            child: IgnorePointer(
+              ignoring: !selected,
+              child: AnimatedOpacity(
+                duration: AppBottomBar._animDuration,
+                curve: AppBottomBar._animCurve,
+                opacity: selected ? 1 : 0,
+                child: Text(
+                  item.label,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTheme.navLabel(selected: true),
+                ),
               ),
-              if (selected) ...[
-                const SizedBox(height: 2),
-                Text(item.label, style: AppTheme.navLabel(selected: true)),
-              ],
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

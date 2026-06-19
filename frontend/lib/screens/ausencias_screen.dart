@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:fitxem/l10n/app_localizations.dart';
 import 'package:fitxem/models/absence_request.dart';
+import 'package:fitxem/models/vacation_balance.dart';
 import 'package:fitxem/services/api_client.dart';
 import 'package:fitxem/theme/app_theme.dart';
 import 'package:fitxem/widgets/app_page.dart';
@@ -19,6 +20,7 @@ class AusenciasScreen extends ConsumerStatefulWidget {
 
 class _AusenciasScreenState extends ConsumerState<AusenciasScreen> {
   List<AbsenceRequest> _absences = [];
+  VacationBalance? _balance;
   bool _loading = true;
   String? _error;
 
@@ -31,9 +33,14 @@ class _AusenciasScreenState extends ConsumerState<AusenciasScreen> {
   Future<void> _load() async {
     setState(() => _error = null);
     try {
-      final list = await ref.read(apiClientProvider).listMyAbsences();
+      final api = ref.read(apiClientProvider);
+      final list = await api.listMyAbsences();
+      final balance = await api.getVacationBalance();
       if (!mounted) return;
-      setState(() => _absences = list);
+      setState(() {
+        _absences = list;
+        _balance = balance;
+      });
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
@@ -74,6 +81,39 @@ class _AusenciasScreenState extends ConsumerState<AusenciasScreen> {
           subtitle: 'Vacaciones, bajas y permisos.',
         ),
         const SizedBox(height: 20),
+        if (_balance != null)
+          AppSoftCard(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(
+                    CupertinoIcons.sun_max,
+                    color: AppTheme.textSecondary,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Vacaciones ${_balance!.year}',
+                          style: AppTheme.rowTitle(context),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${_balance!.remaining} días disponibles · '
+                          '${_balance!.used} usados de ${_balance!.annual}',
+                          style: AppTheme.rowMeta(context),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (_balance != null) const SizedBox(height: 16),
         AppPrimaryButton(
           label: l10n.requestAbsence,
           onTap: () => context.push('/ausencias/new'),

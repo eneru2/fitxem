@@ -1,0 +1,245 @@
+package views
+
+import "github.com/eneru2/just-clock/dashboard/dashdata"
+
+templ ClockEventsPage(events []dashdata.ClockEvent) {
+	@Layout("Fichajes", "clock") {
+		<header class="page-header">
+			<h1>Fichajes</h1>
+			<p class="muted">Últimos registros de fichaje en la plataforma</p>
+		</header>
+		@ClockEventTable(events, true)
+	}
+}
+
+templ ClockEventTable(events []dashdata.ClockEvent, showOrg bool) {
+	<div class="table-wrap">
+		<table class="data-table">
+			<thead>
+				<tr>
+					<th>Fecha</th>
+					<th>Tipo</th>
+					<th>Empleado</th>
+					<th>NIF</th>
+					if showOrg {
+						<th>Organización</th>
+						<th>CIF</th>
+					}
+					<th>Hora</th>
+					<th>Corrección</th>
+					<th>ID</th>
+				</tr>
+			</thead>
+			<tbody>
+				if len(events) == 0 {
+					<tr>
+						<td colspan="9" class="empty">No hay fichajes</td>
+					</tr>
+				}
+				for _, e := range events {
+					<tr>
+						<td class="mono">{ dashdata.FormatTime(e.RecordedAt) }</td>
+						<td><span class="badge">{ dashdata.EventTypeLabel(e.EventType) }</span></td>
+						<td>{ e.Employee }</td>
+						<td><code>{ e.NIF }</code></td>
+						if showOrg {
+							<td>
+								<a href={ templ.SafeURL("/dashboard/orgs/" + e.OrgID.String()) }>{ e.OrgName }</a>
+							</td>
+							<td><code>{ e.OrgCIF }</code></td>
+						}
+						<td><span class="badge badge-muted">{ e.HourType }</span></td>
+						<td>
+							if e.IsCorrection {
+								<span class="badge badge-warn">Sí</span>
+							} else {
+								<span class="muted">—</span>
+							}
+						</td>
+						<td class="mono muted">{ dashdata.ShortID(e.ID) }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}
+
+templ CorrectionsPage(corrections []dashdata.Correction, status string) {
+	@Layout("Correcciones", "corrections") {
+		<header class="page-header">
+			<h1>Correcciones</h1>
+			<p class="muted">Solicitudes de corrección de fichajes</p>
+		</header>
+		<div class="toolbar">
+			<select
+				name="status"
+				hx-get="/dashboard/corrections"
+				hx-trigger="change"
+				hx-target="#correction-table"
+				hx-select="#correction-table"
+				hx-push-url="true"
+			>
+				<option value="" selected?={ status == "" }>Todas</option>
+				<option value="pending" selected?={ status == "pending" }>Pendientes</option>
+				<option value="approved" selected?={ status == "approved" }>Aprobadas</option>
+				<option value="rejected" selected?={ status == "rejected" }>Rechazadas</option>
+			</select>
+		</div>
+		<div id="correction-table">
+			@CorrectionTable(corrections)
+		</div>
+	}
+}
+
+templ CorrectionTable(corrections []dashdata.Correction) {
+	<div class="table-wrap">
+		<table class="data-table">
+			<thead>
+				<tr>
+					<th>Estado</th>
+					<th>Empleado</th>
+					<th>NIF</th>
+					<th>CIF</th>
+					<th>Tipo</th>
+					<th>Propuesta</th>
+					<th>Motivo</th>
+					<th>Solicitud</th>
+					<th>ID</th>
+				</tr>
+			</thead>
+			<tbody>
+				if len(corrections) == 0 {
+					<tr>
+						<td colspan="9" class="empty">No hay correcciones</td>
+					</tr>
+				}
+				for _, c := range corrections {
+					<tr>
+						<td><span class={ dashdata.BadgeClass(c.Status) }>{ c.Status }</span></td>
+						<td>{ c.Employee }</td>
+						<td><code>{ c.NIF }</code></td>
+						<td>
+							<a href={ templ.SafeURL("/dashboard/orgs/" + c.OrgID.String()) }><code>{ c.OrgCIF }</code></a>
+						</td>
+						<td><span class="badge">{ dashdata.EventTypeLabel(c.EventType) }</span></td>
+						<td class="mono">{ dashdata.FormatTime(c.ProposedAt) }</td>
+						<td class="truncate">{ c.Reason }</td>
+						<td class="mono">{ dashdata.FormatTime(c.CreatedAt) }</td>
+						<td class="mono muted">{ dashdata.ShortID(c.ID) }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}
+
+templ AbsencesPage(absences []dashdata.Absence, status string) {
+	@Layout("Ausencias", "absences") {
+		<header class="page-header">
+			<h1>Ausencias</h1>
+			<p class="muted">Solicitudes de vacaciones y ausencias</p>
+		</header>
+		<div class="toolbar">
+			<select
+				name="status"
+				hx-get="/dashboard/absences"
+				hx-trigger="change"
+				hx-target="#absence-table"
+				hx-select="#absence-table"
+				hx-push-url="true"
+			>
+				<option value="" selected?={ status == "" }>Todas</option>
+				<option value="pending" selected?={ status == "pending" }>Pendientes</option>
+				<option value="approved" selected?={ status == "approved" }>Aprobadas</option>
+				<option value="rejected" selected?={ status == "rejected" }>Rechazadas</option>
+			</select>
+		</div>
+		<div id="absence-table">
+			@AbsenceTable(absences)
+		</div>
+	}
+}
+
+templ AbsenceTable(absences []dashdata.Absence) {
+	<div class="table-wrap">
+		<table class="data-table">
+			<thead>
+				<tr>
+					<th>Estado</th>
+					<th>Empleado</th>
+					<th>NIF</th>
+					<th>CIF</th>
+					<th>Tipo</th>
+					<th>Desde</th>
+					<th>Hasta</th>
+					<th>Motivo</th>
+					<th>Solicitud</th>
+				</tr>
+			</thead>
+			<tbody>
+				if len(absences) == 0 {
+					<tr>
+						<td colspan="9" class="empty">No hay ausencias</td>
+					</tr>
+				}
+				for _, a := range absences {
+					<tr>
+						<td><span class={ dashdata.BadgeClass(a.Status) }>{ a.Status }</span></td>
+						<td>{ a.Employee }</td>
+						<td><code>{ a.NIF }</code></td>
+						<td>
+							<a href={ templ.SafeURL("/dashboard/orgs/" + a.OrgID.String()) }><code>{ a.OrgCIF }</code></a>
+						</td>
+						<td><span class="badge">{ dashdata.AbsenceTypeLabel(a.AbsenceType) }</span></td>
+						<td class="mono">{ dashdata.FormatDate(a.StartDate) }</td>
+						<td class="mono">{ dashdata.FormatDate(a.EndDate) }</td>
+						<td class="truncate">{ dashdata.DerefStr(a.Reason) }</td>
+						<td class="mono">{ dashdata.FormatTime(a.CreatedAt) }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}
+
+templ AuditTable(entries []dashdata.AuditEntry) {
+	<div class="table-wrap">
+		<table class="data-table">
+			<thead>
+				<tr>
+					<th>Fecha</th>
+					<th>Acción</th>
+					<th>Entidad</th>
+					<th>ID entidad</th>
+					<th>IP</th>
+				</tr>
+			</thead>
+			<tbody>
+				if len(entries) == 0 {
+					<tr>
+						<td colspan="5" class="empty">No hay entradas de auditoría</td>
+					</tr>
+				}
+				for _, a := range entries {
+					<tr>
+						<td class="mono">{ dashdata.FormatTime(a.CreatedAt) }</td>
+						<td><span class="badge">{ a.Action }</span></td>
+						<td>{ a.EntityType }</td>
+						<td class="mono muted">
+							if a.EntityID != nil {
+								{ dashdata.ShortID(*a.EntityID) }
+							} else {
+								—
+							}
+						</td>
+						<td class="mono">{ dashdata.DerefStr(a.IPAddress) }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}
+
+templ Toast(message string) {
+	<div class="toast" _="on load wait 3s then remove me">{ message }</div>
+}

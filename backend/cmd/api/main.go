@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/eneru2/just-clock/dashboard"
 	"github.com/eneru2/just-clock/internal/absence"
 	"github.com/eneru2/just-clock/internal/auth"
 	"github.com/eneru2/just-clock/internal/billing"
@@ -22,6 +23,7 @@ import (
 	"github.com/eneru2/just-clock/internal/itss"
 	"github.com/eneru2/just-clock/internal/middleware"
 	"github.com/eneru2/just-clock/internal/org"
+	"github.com/eneru2/just-clock/internal/schedule"
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -49,12 +51,14 @@ func main() {
 	exportSvc := compliance.NewExportService(pool, clockSvc)
 	correctionSvc := correction.NewService(pool, clockSvc)
 	absenceSvc := absence.NewService(pool)
+	scheduleSvc := schedule.NewService(pool)
 	itssSvc := itss.NewService(pool, clockSvc, auditSvc)
 	billingSvc := billing.NewService(cfg.StripeSecret, orgSvc)
 
 	api := &handlers.API{
 		Auth: authSvc, Clock: clockSvc, Org: orgSvc, ExportSvc: exportSvc,
-		Correction: correctionSvc, Absence: absenceSvc, Audit: auditSvc, ITSS: itssSvc, Billing: billingSvc,
+		Correction: correctionSvc, Absence: absenceSvc, Schedule: scheduleSvc,
+		Audit: auditSvc, ITSS: itssSvc, Billing: billingSvc,
 	}
 
 	r := chi.NewRouter()
@@ -65,7 +69,7 @@ func main() {
 	r.Use(middleware.SecurityHeaders)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.CORSOrigins,
-		AllowedMethods:   []string{"GET", "POST", "PATCH", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-ITSS-API-Key"},
 		AllowCredentials: true,
 	}))
@@ -99,11 +103,19 @@ func main() {
 		r.Post("/absences", api.CreateAbsence)
 		r.Get("/me/absences", api.ListMyAbsences)
 		r.Get("/me/absences/range", api.ListMyAbsencesInRange)
+		r.Get("/me/schedule", api.MeSchedule)
+		r.Get("/me/vacation-balance", api.MeVacationBalance)
 
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireRole("owner", "admin"))
 			r.Get("/admin/employees", api.ListEmployees)
 			r.Post("/admin/employees", api.CreateEmployee)
+			r.Patch("/admin/employees/{id}/schedule", api.AssignEmployeeSchedule)
+			r.Get("/admin/employees/{id}/schedule", api.GetEmployeeSchedule)
+			r.Get("/admin/schedule-templates", api.ListScheduleTemplates)
+			r.Post("/admin/schedule-templates", api.CreateScheduleTemplate)
+			r.Patch("/admin/schedule-templates/{id}", api.UpdateScheduleTemplate)
+			r.Delete("/admin/schedule-templates/{id}", api.DeleteScheduleTemplate)
 			r.Get("/admin/work-centers", api.ListWorkCenters)
 			r.Get("/admin/reports/daily", api.DailyReport)
 			r.Get("/admin/exports", api.Export)
@@ -116,6 +128,10 @@ func main() {
 	})
 
 	r.Post("/webhooks/stripe", api.StripeWebhook)
+
+	dashStore := dashboard.NewStore(pool)
+	dashAuth := dashboard.NewAuthenticator(cfg.AdminDashboardPassword, cfg.JWTSecret)
+	dashboard.NewHandler(dashStore, dashAuth).Mount(r)
 
 	go runRetentionJob(compliance.NewRetentionService(pool))
 

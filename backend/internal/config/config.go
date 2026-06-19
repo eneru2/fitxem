@@ -7,16 +7,17 @@ import (
 )
 
 type Config struct {
-	DatabaseURL    string
-	APIAddr        string
-	JWTSecret      string
-	JWTAccessTTL   time.Duration
-	JWTRefreshTTL  time.Duration
-	TSAURL         string
-	StripeSecret   string
-	StripeWebhook  string
-	CORSOrigins    []string
-	ITSSAPIKey     string
+	DatabaseURL             string
+	APIAddr                 string
+	JWTSecret               string
+	JWTAccessTTL            time.Duration
+	JWTRefreshTTL           time.Duration
+	TSAURL                  string
+	StripeSecret            string
+	StripeWebhook           string
+	CORSOrigins             []string
+	ITSSAPIKey              string
+	AdminDashboardPassword  string
 }
 
 func Load() Config {
@@ -32,7 +33,8 @@ func Load() Config {
 		StripeSecret:  os.Getenv("STRIPE_SECRET_KEY"),
 		StripeWebhook: os.Getenv("STRIPE_WEBHOOK_SECRET"),
 		CORSOrigins:   splitCSV(getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8081")),
-		ITSSAPIKey:    getenv("ITSS_API_KEY", "dev-itss-key"),
+		ITSSAPIKey:             getenv("ITSS_API_KEY", "dev-itss-key"),
+		AdminDashboardPassword: getenv("ADMIN_DASHBOARD_PASSWORD", ""),
 	}
 }
 

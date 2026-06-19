@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:fitxem/theme/app_theme.dart';
 
 class AppPage extends StatelessWidget {
@@ -52,6 +53,31 @@ class AppLoadingPage extends StatelessWidget {
     return const Scaffold(
       backgroundColor: AppTheme.background,
       body: Center(child: CupertinoActivityIndicator(radius: 12)),
+    );
+  }
+}
+
+class AppBackButton extends StatelessWidget {
+  const AppBackButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => context.pop(),
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+          border: Border.all(color: AppTheme.border),
+        ),
+        child: const Icon(
+          CupertinoIcons.back,
+          size: 18,
+          color: AppTheme.textPrimary,
+        ),
+      ),
     );
   }
 }

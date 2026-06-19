@@ -1,0 +1,152 @@
+package views
+
+import "github.com/eneru2/just-clock/dashboard/dashdata"
+
+templ OrgsPage(orgs []dashdata.Organization, search string) {
+	@Layout("Organizaciones", "orgs") {
+		<header class="page-header">
+			<h1>Organizaciones</h1>
+			<p class="muted">Todos los tenants registrados</p>
+		</header>
+		<div class="toolbar">
+			<input
+				type="search"
+				name="q"
+				placeholder="Buscar por CIF o nombre..."
+				value={ search }
+				hx-get="/dashboard/orgs"
+				hx-trigger="keyup changed delay:300ms, search"
+				hx-target="#org-table-body"
+				hx-select="#org-table-body"
+				hx-push-url="true"
+			/>
+		</div>
+		<div class="table-wrap">
+			<table class="data-table">
+				<thead>
+					<tr>
+						<th>CIF</th>
+						<th>Nombre legal</th>
+						<th>Plan</th>
+						<th>Empleados</th>
+						<th>Usuarios</th>
+						<th>Fichajes</th>
+						<th>Registro</th>
+						<th></th>
+					</tr>
+				</thead>
+				@OrgTableBody(orgs)
+			</table>
+		</div>
+	}
+}
+
+templ OrgTableBody(orgs []dashdata.Organization) {
+	<tbody id="org-table-body">
+		if len(orgs) == 0 {
+			<tr>
+				<td colspan="8" class="empty">No hay organizaciones</td>
+			</tr>
+		}
+		for _, o := range orgs {
+			<tr>
+				<td><code>{ o.CIF }</code></td>
+				<td>{ o.LegalName }</td>
+				<td><span class="badge">{ o.SubscriptionTier }</span></td>
+				<td>{ dashdata.FmtInt(o.EmployeeCount) }</td>
+				<td>{ dashdata.FmtInt(o.UserCount) }</td>
+				<td>{ dashdata.FmtInt(o.ClockEventCount) }</td>
+				<td class="mono">{ dashdata.FormatTime(o.CreatedAt) }</td>
+				<td>
+					<a href={ templ.SafeURL("/dashboard/orgs/" + o.ID.String()) } class="btn btn-sm">Ver</a>
+				</td>
+			</tr>
+		}
+	</tbody>
+}
+
+templ OrgDetailPage(org dashdata.Organization, employees []dashdata.Employee, users []dashdata.User, events []dashdata.ClockEvent, corrections []dashdata.Correction, absences []dashdata.Absence, audit []dashdata.AuditEntry) {
+	@Layout(org.LegalName, "orgs") {
+		<header class="page-header">
+			<div class="breadcrumb">
+				<a href="/dashboard/orgs">Organizaciones</a>
+				<span>/</span>
+				<span>{ org.CIF }</span>
+			</div>
+			<h1>{ org.LegalName }</h1>
+			<div class="meta-row">
+				<span><code>{ org.CIF }</code></span>
+				<span class="badge">{ org.SubscriptionTier }</span>
+				<span class="mono muted">ID: { org.ID.String() }</span>
+			</div>
+		</header>
+		<div class="stats-grid stats-grid-sm">
+			<div class="stat-card">
+				<span class="stat-label">Empleados</span>
+				<span class="stat-value">{ dashdata.FmtInt(org.EmployeeCount) }</span>
+			</div>
+			<div class="stat-card">
+				<span class="stat-label">Usuarios</span>
+				<span class="stat-value">{ dashdata.FmtInt(org.UserCount) }</span>
+			</div>
+			<div class="stat-card">
+				<span class="stat-label">Fichajes</span>
+				<span class="stat-value">{ dashdata.FmtInt(org.ClockEventCount) }</span>
+			</div>
+		</div>
+		<div class="panel" x-data="{ tab: 'employees' }">
+			<div class="tabs">
+				<button type="button" :class="tab === 'employees' ? 'tab active' : 'tab'" @click="tab = 'employees'">Empleados</button>
+				<button type="button" :class="tab === 'users' ? 'tab active' : 'tab'" @click="tab = 'users'">Usuarios</button>
+				<button type="button" :class="tab === 'clock' ? 'tab active' : 'tab'" @click="tab = 'clock'">Fichajes</button>
+				<button type="button" :class="tab === 'corrections' ? 'tab active' : 'tab'" @click="tab = 'corrections'">Correcciones</button>
+				<button type="button" :class="tab === 'absences' ? 'tab active' : 'tab'" @click="tab = 'absences'">Ausencias</button>
+				<button type="button" :class="tab === 'audit' ? 'tab active' : 'tab'" @click="tab = 'audit'">Auditoría</button>
+				<button type="button" :class="tab === 'settings' ? 'tab active' : 'tab'" @click="tab = 'settings'">Ajustes</button>
+			</div>
+			<div x-show="tab === 'employees'">
+				@EmployeeTable(employees, true)
+			</div>
+			<div x-show="tab === 'users'" x-cloak>
+				@UserTable(users, false)
+			</div>
+			<div x-show="tab === 'clock'" x-cloak>
+				@ClockEventTable(events, false)
+			</div>
+			<div x-show="tab === 'corrections'" x-cloak>
+				@CorrectionTable(corrections)
+			</div>
+			<div x-show="tab === 'absences'" x-cloak>
+				@AbsenceTable(absences)
+			</div>
+			<div x-show="tab === 'audit'" x-cloak>
+				@AuditTable(audit)
+			</div>
+			<div x-show="tab === 'settings'" x-cloak>
+				@OrgSettingsForm(org)
+			</div>
+		</div>
+	}
+}
+
+templ OrgSettingsForm(org dashdata.Organization) {
+	<form
+		class="inline-form"
+		hx-post={ templ.SafeURL("/dashboard/orgs/" + org.ID.String() + "/tier") }
+		hx-swap="none"
+	>
+		<label>Plan de suscripción</label>
+		<div class="form-row">
+			<select name="tier">
+				<option value="trial" selected?={ org.SubscriptionTier == "trial" }>trial</option>
+				<option value="starter" selected?={ org.SubscriptionTier == "starter" }>starter</option>
+				<option value="pro" selected?={ org.SubscriptionTier == "pro" }>pro</option>
+				<option value="enterprise" selected?={ org.SubscriptionTier == "enterprise" }>enterprise</option>
+			</select>
+			<button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+		</div>
+		if org.StripeCustomerID != nil {
+			<p class="muted mono">Stripe: { *org.StripeCustomerID }</p>
+		}
+	</form>
+}

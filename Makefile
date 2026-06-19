@@ -1,6 +1,19 @@
-.PHONY: dev up down db-up db-down migrate api test test-go test-flutter flutter lint build-api
+.PHONY: dev up down db-up db-down migrate api test test-go test-flutter flutter lint build-api klein templ-install
 
 COMPOSE := docker compose -f infra/docker/docker-compose.yml
+
+define run_templ
+	if command -v templ >/dev/null 2>&1; then \
+		templ $(1); \
+	elif [ -x "$$(go env GOPATH)/bin/templ" ]; then \
+		"$$(go env GOPATH)/bin/templ" $(1); \
+	else \
+		go run github.com/a-h/templ/cmd/templ@latest $(1); \
+	fi
+endef
+
+templ-install:
+	go install github.com/a-h/templ/cmd/templ@latest
 
 # Local dev: Postgres + API (migrations run automatically on API start).
 dev: db-up
@@ -31,7 +44,17 @@ migrate:
 migrate-down:
 	cd backend && go run -tags tools ./cmd/migrate 2>/dev/null || true
 
-api:
+klein:
+	cd backend/dashboard && \
+	$(call run_templ,generate ./views/...) && \
+	mkdir -p .klein/views && \
+	for f in views/*_templ.go; do \
+		base=$$(basename "$$f" _templ.go); \
+		cp "$$f" ".klein/views/$$base.templ.go"; \
+	done && \
+	rm -f views/*_templ.go
+
+api: klein
 	cd backend && go run ./cmd/api
 
 test: test-go test-flutter
@@ -49,5 +72,5 @@ lint:
 	cd backend && go vet ./...
 	cd frontend && flutter analyze
 
-build-api:
+build-api: klein
 	cd backend && go build -o bin/api ./cmd/api

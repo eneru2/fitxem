@@ -348,4 +348,16 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get locationSkippedImprecise =>
       'Fichaje registrado sin ubicación: la precisión GPS es insuficiente.';
+
+  @override
+  String get clockGpsOn => 'GPS activado';
+
+  @override
+  String get clockGpsOff => 'Sin GPS';
+
+  @override
+  String get clockGpsLinuxWarningTitle => 'GPS en Linux';
+
+  @override
+  String get ok => 'Aceptar';
 }

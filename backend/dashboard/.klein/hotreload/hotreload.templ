@@ -1,0 +1,43 @@
+package hotreload
+
+templ HotReloader() {
+	if DevEnabled() {
+		<script>
+			(() => {
+				const wsURL = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws";
+				let connected = false;
+
+				const waitForServer = async () => {
+					try {
+						const res = await fetch("/health");
+						if (!res.ok) throw new Error("unhealthy");
+						location.reload();
+					} catch {
+						setTimeout(waitForServer, 500);
+					}
+				};
+
+				const connect = () => {
+					const socket = new WebSocket(wsURL);
+
+					socket.onopen = () => {
+						connected = true;
+					};
+
+					socket.onmessage = () => location.reload();
+
+					socket.onclose = () => {
+						if (connected) {
+							connected = false;
+							waitForServer();
+						} else {
+							setTimeout(connect, 500);
+						}
+					};
+				};
+
+				connect();
+			})();
+		</script>
+	}
+}
